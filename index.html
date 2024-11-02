@@ -1,0 +1,656 @@
+<html><head>
+<title>$SPONGEAI</title>
+<link rel="icon" href="pfp.png" type="image/x-icon">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+<style>
+  @font-face { font-family: 'SpongeBoy Font'; src: url('https://file.garden/ZqpV_qhJuCvIIvTf/SpongeBob.ttf') format('truetype'); }
+  body { margin: 0; overflow: hidden; font-family: 'SpongeBoy Font', Arial, sans-serif; }
+  canvas { display: block; }
+  #ui, #credit, #subtitles, #transitionOverlay, #topicDisplay, #stopTopic, #walkingToggle, #watermark, #anyaiWatermark, #bubbleTransition, #uiToggle { position: absolute; }
+  #ui { top: 10px; left: 10px; z-index: 100; }
+  button, select, input { padding: 10px; margin: 5px; font-size: 16px; cursor: pointer; font-family: 'SpongeBoy Font', Arial, sans-serif; }
+  #credit { bottom: 10px; left: 10px; color: rgba(255,255,255,0.5); font-size: 12px; z-index: 100; }
+  #subtitles { bottom: 50px; left: 50%; transform: translateX(-50%); background-color: rgba(0,0,0,0.7); color: white; padding: 10px; border-radius: 5px; font-size: 24px; text-align: center; max-width: 80%; z-index: 100; font-family: 'SpongeBoy Font', Arial, sans-serif; line-height: 1.4; }
+  #transitionOverlay { top: 0; left: 0; width: 100%; height: 100%; background-color: black; display: none; justify-content: center; align-items: center; z-index: 1000; }
+  #transitionOverlay img { max-width: 100%; max-height: 100%; }
+  #topicDisplay { top: 10px; right: 10px; background-color: rgba(0,0,0,0.7); color: white; padding: 10px; border-radius: 5px; font-size: 18px; z-index: 100; font-family: 'SpongeBoy Font', Arial, sans-serif; }
+  #stopTopic { bottom: 10px; right: 10px; background-color: #ff4136; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; display: none; z-index: 100; font-family: 'SpongeBoy Font', Arial, sans-serif; }
+  #walkingToggle { top: 50px; right: 10px; z-index: 100; }
+  #uiToggle { top: 90px; right: 10px; z-index: 100; }
+  #watermark { bottom: 10px; right: 10px; font-size: 16px; z-index: 100; font-family: Arial, sans-serif; transition: bottom 0.3s ease-in-out; }
+  #anyaiWatermark { bottom: 30px; right: 10px; font-size: 16px; z-index: 100; font-family: Arial, sans-serif; }
+  #watermark span, #anyaiWatermark span { font-weight: bold; }
+  #watermark .pine { color: #FFA500; }
+  #watermark .guy { color: #00FF00; }
+  #anyaiWatermark .any { color: #FF00FF; }
+  #anyaiWatermark .ai { color: #00FFFF; }
+  #bubbleTransition { top: 0; left: 0; width: 100%; height: 100%; display: none; z-index: 1001; }
+  #bubbleTransition img { width: 100%; height: 100%; object-fit: cover; }
+</style>
+</head>
+<body>
+  <div id="loadingText" style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); color: white; font-size: 24px; display: none;">
+    Loading, please wait...
+  </div>
+  <div id="ui">
+    <select id="modelSelect" disabled style="display: none;"> <!-- Added style to hide the select -->
+      <option value="">AI Model Disabled</option>
+    </select>
+    <input type="text" id="topicInput" placeholder="Enter a topic">
+    <input type="number" id="sentenceCount" value="4" min="1" max="20" step="1">
+    <button id="submitTopic">Submit Topic</button>
+  </div>
+<div id="credit">$SPONGEAI</div>
+<div id="subtitles"></div>
+<div id="topicDisplay"></div>
+<button id="stopTopic">Stop Conversation</button>
+<div id="walkingToggle">
+  <label for="walkingCheckbox">Enable Walking: </label>
+  <input type="checkbox" id="walkingCheckbox">
+</div>
+<div id="uiToggle">
+  <label for="uiCheckbox">Hide UI during conversation:</label>
+  <input type="checkbox" id="uiCheckbox">
+</div>
+<div id="watermark"><span class="pine">CA: </span><span class="guy"></span> 🍍</div>
+<div id="anyaiWatermark"><span class="any"></span><span class="ai"></span></div>
+<div id="transitionOverlay"><img src="https://j.gifs.com/KOG3Jz@large.gif?download=false" alt="A few moments later"></div>
+<div id="bubbleTransition"><img src="https://file.garden/ZqpV_qhJuCvIIvTf/bubbles%20sound.gif" alt="Bubble transition"></div>
+<audio id="transitionAudio" src="https://file.garden/ZqpV_qhJuCvIIvTf/a-few-moments-later-hd.mp3"></audio>
+<audio id="backgroundMusic" src="https://file.garden/ZqpV_qhJuCvIIvTf/Spongebob%20Squarepants%20-%20Ending.mp3" loop=""></audio>
+<audio id="garyMeow" src="https://file.garden/ZqpV_qhJuCvIIvTf/gary-meow-v2-made-with-Voicemod.mp3"></audio>
+<audio id="bubbleSound" src="https://file.garden/ZqpV_qhJuCvIIvTf/spongebob-bubble-transition-sound-effect-made-with-Voicemod.mp3"></audio>
+<script>
+const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000), renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+directionalLight.position.set(1, 1, 1);
+scene.add(directionalLight);
+
+const pointLight = new THREE.PointLight(0xffffff, 0.5);
+pointLight.position.set(0, 2, 0);
+scene.add(pointLight);
+
+new THREE.TextureLoader().load('https://devforum-uploads.s3.dualstack.us-east-2.amazonaws.com/uploads/original/4X/7/3/d/73db839845f7f569d1a64127053a324c7dcc25ac.png', (skyboxTexture) => {
+  const rt = new THREE.WebGLCubeRenderTarget(skyboxTexture.image.height);
+  rt.fromEquirectangularTexture(renderer, skyboxTexture);
+  scene.background = rt.texture;
+});
+
+const gltfLoader = new THREE.GLTFLoader();
+let dioramaModel, spongeBobModel, patrickModel, garyModel, mrKrabsModel, squidwardModel, planktonModel, sandyModel;
+
+function loadModel(url, callback) {
+  gltfLoader.load(url, (gltf) => {
+    callback(gltf.scene);
+  }, undefined, console.error);
+}
+
+const loadingText = document.getElementById('loadingText');
+
+// Show loading text
+loadingText.style.display = 'block';
+
+
+loadModel('https://file.garden/ZqpV_qhJuCvIIvTf/sm_diroama.glb', (model) => {
+  dioramaModel = model;
+  scene.add(dioramaModel);
+  const box = new THREE.Box3().setFromObject(dioramaModel);
+  const center = box.getCenter(new THREE.Vector3());
+  dioramaModel.position.sub(center);
+  loadModel('https://file.garden/ZqpV_qhJuCvIIvTf/spongebob_squarepants.glb', loadSpongeBob);
+});
+
+function loadSpongeBob(model) {
+  spongeBobModel = model;
+  scene.add(spongeBobModel);
+  spongeBobModel.scale.set(0.3, 0.3, 0.3);
+  const dioramaBox = new THREE.Box3().setFromObject(dioramaModel);
+  const spongeBobBox = new THREE.Box3().setFromObject(spongeBobModel);
+  const dioramaSize = dioramaBox.getSize(new THREE.Vector3());
+  const spongeBobSize = spongeBobBox.getSize(new THREE.Vector3());
+  spongeBobModel.position.set(0, dioramaBox.min.y + spongeBobSize.y / 2 + 0.03, dioramaSize.z / 4);
+  spongeBobModel.rotation.y = -Math.PI / 2;
+  spongeBobModel.originalPosition = spongeBobModel.position.clone();
+  spongeBobModel.originalRotation = spongeBobModel.rotation.y;
+  loadModel('https://file.garden/ZqpV_qhJuCvIIvTf/patrick.glb', loadPatrick);
+
+  // Hide loading text after all models are loaded
+  loadingText.style.display = 'none';
+}
+
+function loadPatrick(model) {
+  patrickModel = model;
+  scene.add(patrickModel);
+  patrickModel.scale.set(0.2, 0.2, 0.2);
+  patrickModel.position.copy(spongeBobModel.position).add(new THREE.Vector3(-0.8, 0, 0));
+  patrickModel.rotation.y = Math.PI / 2;
+  patrickModel.originalPosition = patrickModel.position.clone();
+  patrickModel.originalRotation = patrickModel.rotation.y;
+  loadModel('https://file.garden/ZqpV_qhJuCvIIvTf/gary_the_snail.glb', loadGary);
+}
+
+function loadGary(model) {
+  garyModel = model;
+  scene.add(garyModel);
+  garyModel.scale.set(0.05, 0.05, 0.05);
+  garyModel.position.copy(spongeBobModel.position).add(new THREE.Vector3(0.15, 0, -0.3));
+  garyModel.rotation.y = Math.PI * 2;
+  garyModel.visible = true;
+  garyModel.originalPosition = garyModel.position.clone();
+  garyModel.originalRotation = garyModel.rotation.y;
+  loadModel('https://file.garden/ZqpV_qhJuCvIIvTf/spongebob_squarepants_mr_krabs.glb', loadMrKrabs);
+}
+
+function loadMrKrabs(model) {
+  mrKrabsModel = model;
+  scene.add(mrKrabsModel);
+  mrKrabsModel.scale.set(0.10, 0.10, 0.10);
+  mrKrabsModel.position.copy(spongeBobModel.position).add(new THREE.Vector3(-0.4, 0, -0.4));
+  mrKrabsModel.rotation.y = 0;
+  mrKrabsModel.visible = true;
+  mrKrabsModel.originalPosition = mrKrabsModel.position.clone();
+  mrKrabsModel.originalRotation = mrKrabsModel.rotation.y;
+  loadModel('https://file.garden/ZqpV_qhJuCvIIvTf/spongebob_squarepants_squidward.glb', loadSquidward);
+}
+
+function loadSquidward(model) {
+  squidwardModel = model;
+  scene.add(squidwardModel);
+  squidwardModel.scale.set(0.15, 0.15, 0.15);
+  squidwardModel.position.copy(spongeBobModel.position).add(new THREE.Vector3(0.4, 0, -0.4));
+  squidwardModel.rotation.y = -Math.PI / 4;
+  squidwardModel.visible = true;
+  squidwardModel.originalPosition = squidwardModel.position.clone();
+  squidwardModel.originalRotation = squidwardModel.rotation.y;
+  loadModel('https://file.garden/ZqpV_qhJuCvIIvTf/plankton_spongebob%20(1).glb', loadPlankton);
+}
+
+function loadPlankton(model) {
+  planktonModel = model;
+  scene.add(planktonModel);
+  planktonModel.scale.set(0.0005, 0.0005, 0.0005);
+  planktonModel.position.copy(patrickModel.position).add(new THREE.Vector3(-0.2, 0, 0.2));
+  planktonModel.rotation.y = Math.PI / 4;
+  planktonModel.visible = true;
+  planktonModel.originalPosition = planktonModel.position.clone();
+  planktonModel.originalRotation = planktonModel.rotation.y;
+  loadModel('https://file.garden/ZqpV_qhJuCvIIvTf/bfbbr_sandy.glb', loadSandy);
+}
+
+function loadSandy(model) {
+  sandyModel = model;
+  scene.add(sandyModel);
+  sandyModel.scale.set(0.2, 0.2, 0.2);
+  sandyModel.position.copy(spongeBobModel.position).add(new THREE.Vector3(0.6, 0, 0.4));
+  sandyModel.rotation.y = -Math.PI / 3;
+  sandyModel.visible = true;
+  sandyModel.originalPosition = sandyModel.position.clone();
+  sandyModel.originalRotation = sandyModel.rotation.y;
+  setupCamera();
+}
+
+function setupCamera() {
+  const midpoint = new THREE.Vector3().addVectors(spongeBobModel.position, patrickModel.position).multiplyScalar(0.5);
+  const offset = new THREE.Vector3(-0.7, 0.3, 1);
+  camera.position.copy(midpoint).add(offset);
+  camera.lookAt(midpoint);
+}
+
+function focusOnCharacter(character, duration = 1000) {
+  const midpoint = new THREE.Vector3().addVectors(spongeBobModel.position, patrickModel.position).multiplyScalar(0.5);
+  const offset = new THREE.Vector3(0, 0.3, 1);
+  let targetPosition, targetLookAt;
+
+  if (character === spongeBobModel) {
+    targetPosition = midpoint.clone().add(new THREE.Vector3(-0.7, 0.3, 1));
+    targetLookAt = spongeBobModel.position.clone();
+  } else if (character === patrickModel) {
+    targetPosition = midpoint.clone().add(new THREE.Vector3(0.7, 0.3, 1));
+    targetLookAt = patrickModel.position.clone();
+  } else if (character === garyModel) {
+    targetPosition = midpoint.clone().add(new THREE.Vector3(-0.5, 0.2, 0.8));
+    targetLookAt = garyModel.position.clone();
+  } else if (character === mrKrabsModel) {
+    targetPosition = midpoint.clone().add(new THREE.Vector3(0, 0.5, 1));
+    targetLookAt = mrKrabsModel.position.clone();
+  } else if (character === squidwardModel) {
+    targetPosition = midpoint.clone().add(new THREE.Vector3(0.5, 0.4, 1));
+    targetLookAt = squidwardModel.position.clone();
+  } else if (character === planktonModel) {
+    targetPosition = midpoint.clone().add(new THREE.Vector3(-0.3, 0.1, 0.7));
+    targetLookAt = planktonModel.position.clone();
+  } else if (character === sandyModel) {
+    targetPosition = midpoint.clone().add(new THREE.Vector3(0.6, 0.4, 1));
+    targetLookAt = sandyModel.position.clone();
+  }
+
+  new TWEEN.Tween(camera.position).to(targetPosition, duration).easing(TWEEN.Easing.Quadratic.InOut).start();
+  new TWEEN.Tween(camera).to({ lookAt: targetLookAt }, duration).easing(TWEEN.Easing.Quadratic.InOut).onUpdate(() => camera.lookAt(targetLookAt)).start();
+}
+
+let isSpeaking = false;
+document.getElementById('submitTopic').addEventListener('click', () => {
+  const topic = document.getElementById('topicInput').value;
+  const model = document.getElementById('modelSelect').value || 'gpt-3.5-turbo-0125';
+  const sentenceCount = document.getElementById('sentenceCount').value || 4;
+  if (!topic) { alert('Talk to SpongeBob broski.'); return; }
+
+  document.getElementById('topicDisplay').textContent = `Topic: ${topic}`;
+
+  // Make all characters visible
+  if (garyModel) garyModel.visible = true;
+  if (mrKrabsModel) mrKrabsModel.visible = true;
+  if (squidwardModel) squidwardModel.visible = true;
+  if (planktonModel) planktonModel.visible = true;
+  if (sandyModel) sandyModel.visible = true;
+
+  let systemPrompt = `You are SpongeBob, Patrick, Gary, Mr. Krabs, Squidward, Plankton, and Sandy talking about ${topic}. Respond with dialogue, each character speaking once. Start lines with "SpongeBob:", "Patrick:", "Gary:", "Mr. Krabs:", "Squidward:", "Plankton:", "Sandy:". Gary uses "Meow" sounds. Keep it fun and in character. Provide only the raw conversation without any introductory text. Limit the conversation to ${sentenceCount} sentences.`;
+
+  fetch('https://api.llmplayground.net/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `Start a conversation about ${topic} in ${sentenceCount} sentences` }
+      ],
+      max_tokens: 2048,
+      temperature: 0.7,
+    }),
+  })
+  .then(response => response.json())
+  .then(data => {
+    const conversation = data.choices[0].message.content;
+    // Directly call playBubbleTransition and displayConversation
+    playBubbleTransition(() => displayConversation(conversation));
+  })
+  .catch(error => console.error('Error:', error));
+});
+
+// The playTransition function stays intact but unused
+function playTransition(callback) {
+  const overlay = document.getElementById('transitionOverlay');
+  const audio = document.getElementById('transitionAudio');
+  overlay.style.display = 'flex';
+  audio.play();
+  audio.onended = () => {
+    overlay.style.display = 'none';
+    callback();
+  };
+}
+
+
+function playBubbleTransition(callback) {
+  const bubbleTransition = document.getElementById('bubbleTransition');
+  const bubbleSound = document.getElementById('bubbleSound');
+  bubbleTransition.style.display = 'block';
+  bubbleSound.play();
+  setTimeout(() => {
+    bubbleTransition.style.display = 'none';
+    callback();
+  }, 1000);
+}
+
+function displayConversation(conversation) {
+  const lines = conversation.split('\n');
+  const sentenceCount = parseInt(document.getElementById('sentenceCount').value) || 4;
+  let currentIndex = 0;
+  let sentencesDisplayed = 0;
+  isSpeaking = true;
+  document.getElementById('stopTopic').style.display = 'block';
+  document.getElementById('watermark').style.bottom = '90px';
+  document.getElementById('anyaiWatermark').style.bottom = '50px';
+
+  if (document.getElementById('uiCheckbox').checked) {
+    hideUI();
+  }
+
+  function applyAdvancedVoiceProcessing(audioNode, character) {
+  if (character === 'spongebob') {
+    const chorus = audioContext.createGain();  // Replace with a real chorus effect processor if available
+    chorus.gain.value = 1.1;  // Slight modulation
+    audioNode.connect(chorus);
+    chorus.connect(audioContext.destination);
+  } else if (character === 'plankton') {
+    const distortion = audioContext.createWaveShaper();
+    distortion.curve = makeDistortionCurve(400);
+    audioNode.connect(distortion);
+    distortion.connect(audioContext.destination);
+  }
+  // Add more custom effects as needed for other characters
+}
+
+function makeDistortionCurve(amount) {
+  const k = typeof amount === 'number' ? amount : 50;
+  const n_samples = 44100;
+  const curve = new Float32Array(n_samples);
+  const deg = Math.PI / 180;
+  let i = 0, x;
+  for (; i < n_samples; ++i) {
+    x = i * 2 / n_samples - 1;
+    curve[i] = (3 + k) * x * 20 * deg / (Math.PI + k * Math.abs(x));
+  }
+  return curve;
+}
+
+
+  function displayNextLine() {
+    if (currentIndex < lines.length && sentencesDisplayed < sentenceCount && isSpeaking) {
+      const line = lines[currentIndex].trim();
+      if (line) {
+        const subtitles = document.getElementById('subtitles');
+        subtitles.textContent = line;
+
+        const characterMatch = line.match(/^(\w+\s?\w*?):/);
+        if (characterMatch) {
+          const character = characterMatch[1].toLowerCase();
+          let model, voice, pitch, rate;
+
+          switch (character) {
+  case 'spongebob':
+    model = spongeBobModel;
+    voice = 'en-US-Wavenet-B';  // High-pitched voice
+    pitch = 2.5;                // Increase the pitch to get closer to SpongeBob's iconic voice
+    rate = 1.3;                 // Speed it up a bit
+    volume = 1.5;               // Normal volume
+    break;
+  
+  case 'patrick':
+    model = patrickModel;
+    voice = 'en-US-Wavenet-D';  // Deep, slow voice for Patrick
+    pitch = 0.8;                // Lower pitch
+    rate = 0.75;                // Slow down to match Patrick's speech pattern
+    volume = 0.9;               // Slightly softer
+    break;
+  
+  case 'gary':
+    model = garyModel;
+    // No voice needed for Gary, just meow sounds or custom effects
+    break;
+
+  case 'mr. krabs':
+    model = mrKrabsModel;
+    voice = 'en-US-Wavenet-B';  // Gruff voice
+    pitch = 0.6;                // Lower the pitch for a more gruff, deep voice
+    rate = 1.0;                 // Keep normal speed
+    volume = 1.2;               // Louder for Mr. Krabs' assertive tone
+    break;
+  
+  case 'squidward':
+    model = squidwardModel;
+    voice = 'en-US-Wavenet-A';  // Nasal, sarcastic voice
+    pitch = 0.9;                // Slightly lower pitch
+    rate = 0.85;                // Slower speech for Squidward's slow drawl
+    volume = 0.95;              // Keep it normal
+    break;
+
+  case 'plankton':
+    model = planktonModel;
+    voice = 'en-US-Wavenet-E';  // Higher-pitched, more evil-sounding voice
+    pitch = 1.5;                // Raise pitch to match Plankton's squeaky voice
+    rate = 1.1;                 // Slightly fast
+    volume = 1.0;               // Normal volume
+    break;
+
+  case 'sandy':
+    model = sandyModel;
+    voice = 'en-US-Wavenet-F';  // Southern accent, upbeat voice
+    pitch = 3.2;                // Slightly higher pitch
+    rate = 1.0;                 // Normal speed
+    volume = 1.0;               // Normal volume
+    break;
+}
+
+
+          if (model) {
+            focusOnCharacter(model);
+            if (character === 'gary') {
+              playGaryMeow(line.substring(line.indexOf(':') + 1).trim(), () => setTimeout(displayNextLine, 1000));
+            } else {
+              speakLine(line.substring(line.indexOf(':') + 1).trim(), voice, pitch, rate, () => setTimeout(displayNextLine, 1000));
+            }
+          } else {
+            setTimeout(displayNextLine, 2000);
+          }
+        } else {
+          setTimeout(displayNextLine, 2000);
+        }
+
+        sentencesDisplayed++;
+        currentIndex++;
+      } else {
+        currentIndex++;
+        displayNextLine();
+      }
+    } else {
+      document.getElementById('subtitles').textContent = '';
+      document.getElementById('stopTopic').style.display = 'none';
+      document.getElementById('watermark').style.bottom = '30px';
+      document.getElementById('anyaiWatermark').style.bottom = '10px';
+      isSpeaking = false;
+      showUI();
+    }
+  }
+
+  displayNextLine();
+}
+
+function speakLine(text, voice, pitch, rate, callback) {
+  if (!isSpeaking) { callback(); return; }
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.voice = speechSynthesis.getVoices().find(v => v.name === voice) || speechSynthesis.getVoices()[0];
+  utterance.pitch = pitch;
+  utterance.rate = rate;
+  utterance.volume = 1.0;
+  utterance.onend = () => { if (isSpeaking) setTimeout(callback, 500); };
+  speechSynthesis.speak(utterance);
+}
+
+function playGaryMeow(text, callback) {
+  if (!isSpeaking) { callback(); return; }
+  const garyMeow = document.getElementById('garyMeow');
+  const meowCount = Math.max(1, Math.min(text.split(' ').length, 3));
+  let meowsPlayed = 0;
+
+  function playNextMeow() {
+    if (meowsPlayed < meowCount) {
+      garyMeow.currentTime = 0;
+      garyMeow.play().then(() => {
+        meowsPlayed++;
+      }).catch(error => {
+        console.error('Error playing Gary meow:', error);
+        meowsPlayed++;
+        if (meowsPlayed >= meowCount) {
+          setTimeout(callback, 500);
+        } else {
+          setTimeout(playNextMeow, 300);
+        }
+      });
+    } else {
+      setTimeout(callback, 500);
+    }
+  }
+
+  garyMeow.onended = () => {
+    if (meowsPlayed < meowCount) {
+      setTimeout(playNextMeow, 300);
+    } else {
+      setTimeout(callback, 500);
+    }
+  };
+
+  playNextMeow();
+}
+
+document.getElementById('stopTopic').addEventListener('click', () => {
+  isSpeaking = false;
+  speechSynthesis.cancel();
+  document.getElementById('subtitles').textContent = '';
+  document.getElementById('stopTopic').style.display = 'none';
+  document.getElementById('watermark').style.bottom = '30px';
+  document.getElementById('anyaiWatermark').style.bottom = '10px';
+  document.getElementById('garyMeow').pause();
+  document.getElementById('garyMeow').currentTime = 0;
+  showUI();
+});
+
+let walkingEnabled = false;
+
+document.getElementById('walkingCheckbox').addEventListener('change', (event) => {
+  walkingEnabled = event.target.checked;
+  if (!walkingEnabled) {
+    resetCharacterPositions();
+  }
+});
+
+function moveCharacter(character) {
+  if (!character || !character.visible) return;
+
+  const speed = 0.005;
+  const maxDistance = 1;
+
+  character.translateZ(speed);
+
+  const distance = new THREE.Vector3(
+    character.position.x - character.originalPosition.x,
+    0,
+    character.position.z - character.originalPosition.z
+  ).length();
+
+  if (distance > maxDistance) {
+    character.rotation.y += (Math.random() - 0.5) * Math.PI / 2;
+    
+    const direction = new THREE.Vector3(
+      character.position.x - character.originalPosition.x,
+      0,
+      character.position.z - character.originalPosition.z
+    ).normalize();
+
+    character.position.set(
+      character.originalPosition.x + direction.x * maxDistance,
+      character.originalPosition.y,
+      character.originalPosition.z + direction.z * maxDistance
+    );
+  }
+}
+
+function resetCharacterPositions() {
+  [spongeBobModel, patrickModel, garyModel, mrKrabsModel, squidwardModel, planktonModel, sandyModel].forEach(character => {
+    if (character && character.originalPosition) {
+      character.position.copy(character.originalPosition);
+      character.rotation.y = character.originalRotation;
+    }
+  });
+}
+
+function animate(time) {
+  requestAnimationFrame(animate);
+
+  if (walkingEnabled) {
+    moveCharacter(spongeBobModel);
+    moveCharacter(patrickModel);
+    moveCharacter(garyModel);
+    moveCharacter(mrKrabsModel);
+    moveCharacter(squidwardModel);
+    moveCharacter(planktonModel);
+    moveCharacter(sandyModel);
+  }
+
+  TWEEN.update(time);
+  renderer.render(scene, camera);
+}
+
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+fetch('https://api.llmplayground.net/v1/models')
+  .then(response => response.json())
+  .then(data => {
+    const select = document.getElementById('modelSelect');
+    data.data.forEach(model => {
+      const option = document.createElement('option');
+      option.value = model.id;
+      option.textContent = model.id;
+      select.appendChild(option);
+    });
+    select.value = 'gpt-3.5-turbo-0125';
+  })
+  .catch(error => console.error('Error fetching AI models:', error));
+
+const backgroundMusic = document.getElementById('backgroundMusic');
+backgroundMusic.volume = 0.1;
+
+document.addEventListener('DOMContentLoaded', (event) => {
+  backgroundMusic.play().catch(e => console.log("Autoplay prevented:", e));
+});
+
+document.body.addEventListener('click', () => {
+  if (backgroundMusic.paused) {
+    backgroundMusic.play().catch(e => console.log("Playback failed:", e));
+  }
+}, { once: true });
+
+speechSynthesis.onvoiceschanged = () => {
+  console.log("Voices loaded:", speechSynthesis.getVoices());
+};
+
+const garyMeow = document.getElementById('garyMeow');
+garyMeow.load();
+
+const uiCheckbox = document.getElementById('uiCheckbox');
+const uiElements = ['ui', 'topicDisplay', 'walkingToggle'];
+
+function hideUI() {
+  uiElements.forEach(id => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.style.display = 'none';
+    }
+  });
+}
+
+function showUI() {
+  uiElements.forEach(id => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.style.display = 'block';
+    }
+  });
+}
+
+uiCheckbox.addEventListener('change', (event) => {
+  if (isSpeaking) {
+    if (event.target.checked) {
+      hideUI();
+    } else {
+      showUI();
+    }
+  }
+});
+
+function hideModelSelect() {
+  document.getElementById('modelSelect').style.display = 'none'; // To hide
+}
+
+// Function to show the model select box
+function showModelSelect() {
+  document.getElementById('modelSelect').style.display = 'block'; // To show
+}
+
+// Call the hide function when the page loads or based on your logic
+hideModelSelect();
+</script>
+</body>
+</html>
